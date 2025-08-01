@@ -31,6 +31,7 @@ function KpisForm() {
   const [poInHomeD1, setPoInHomeD1] = useState('');
   const [treinamentos, setTreinamentos] = useState('');
   const [orcamento, setOrcamento] = useState('');
+  const [metaOrcamentoCiVd, setMetaOrcamentoCiVd] = useState('');
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -74,6 +75,16 @@ function KpisForm() {
         timestamp: serverTimestamp(),
       }, { merge: true });
 
+      // Nova lógica para atualizar a meta
+      if (parseFloat(metaOrcamentoCiVd) > 10000 && parseInt(week) === 0) {
+        const metaDocRef = doc(db, 'metas', 'meta_orcamento_ci_vd');
+        await setDoc(metaDocRef, {
+          meta: parseFloat(metaOrcamentoCiVd),
+          lastUpdate: serverTimestamp()
+        }, { merge: true });
+        alert("Meta de orçamento atualizada no Firebase com sucesso!");
+      }
+
       alert('Dados de KPI salvos com sucesso no Firebase!');
 
       // Limpar formulário após o envio
@@ -104,6 +115,7 @@ function KpisForm() {
       setPoInHomeD1('');
       setTreinamentos('');
       setOrcamento('');
+      setMetaOrcamentoCiVd('');
 
     } catch (e) {
       console.error("Erro ao adicionar documento de ", e);
@@ -124,6 +136,16 @@ function KpisForm() {
           min="0"
           onWheel={(e) => e.target.blur()}
           required
+        />
+        {/* NOVO CAMPO */}
+        <label htmlFor="metaOrcamentoCiVd">Meta Orçamento CI VD:</label>
+        <input
+          type="number"
+          id="metaOrcamentoCiVd"
+          value={metaOrcamentoCiVd}
+          onChange={(e) => setMetaOrcamentoCiVd(e.target.value)}
+          min="0"
+          onWheel={(e) => e.target.blur()}
         />
         <h2>LTP</h2>
         {/* LTP */}
@@ -157,8 +179,8 @@ function KpisForm() {
         {/* FTC HAPPY CALL (Novo campo unificado) */}
         <label htmlFor="ftcHappyCall">FTC HAPPY CALL:</label>
         <input type="text" id="ftcHappyCall" value={ftcHappyCall} onChange={(e) => setFtcHappyCall(e.target.value)} />
-      
-       <h2>Velocidade</h2>
+
+        <h2>Velocidade</h2>
 
         {/* Visitas */}
         <label htmlFor="firstVisitVd">1ST VISIT VD:</label>
@@ -167,7 +189,7 @@ function KpisForm() {
         <label htmlFor="inHomeD1">IN HOME D+1:</label>
         <input type="text" id="inHomeD1" value={inHomeD1} onChange={(e) => setInHomeD1(e.target.value)} />
 
-        
+
 
 
         <h2>Perfeição</h2>
@@ -198,7 +220,7 @@ function KpisForm() {
 
 
         <h2>Peças</h2>
-         {/* PO IN HOME D+1 (Novo Campo) */}
+        {/* PO IN HOME D+1 (Novo Campo) */}
         <label htmlFor="poInHomeD1">PO IN HOME D+1:</label>
         <input type="text" id="poInHomeD1" value={poInHomeD1} onChange={(e) => setPoInHomeD1(e.target.value)} />
 
