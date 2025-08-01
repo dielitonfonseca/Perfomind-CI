@@ -1,12 +1,12 @@
 // src/components/Form.js
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../firebaseConfig';
-import { collection, doc, setDoc, serverTimestamp, getDoc, updateDoc, increment, query, where, getDocs } from 'firebase/firestore';
+import { collection, doc, setDoc, serverTimestamp, getDoc, updateDoc, increment } from 'firebase/firestore';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { saveAs } from 'file-saver';
 import SignatureCanvas from 'react-signature-canvas';
 
-function Form({ setFormData }) {
+function Form() {
   const [numero, setNumero] = useState('');
   const [cliente, setCliente] = useState('');
   const [tecnicoSelect, setTecnicoSelect] = useState('');
@@ -15,7 +15,7 @@ function Form({ setFormData }) {
   const [reparoSelect, setReparoSelect] = useState('');
   const [peca, setPeca] = useState('');
   const [observacoes, setObservacoes] = useState('');
-  const [isSamsung] = useState(true); // Removido o checkbox, padrão é sempre true
+  const [isSamsung] = useState(true);
 
   // Novos estados para o PDF (padronizado para VD)
   const [modelo, setModelo] = useState('');
@@ -77,25 +77,6 @@ function Form({ setFormData }) {
     return padraoSamsung.test(num);
   };
 
-  const gerarTextoResultado = (data) => {
-    const { numero, cliente, tecnico, defeito, reparo, peca, observacoes, atendimentoGarantia, orcamentoAprovado, valorAprovado, valorPago, reparo1stVisit } = data;
-    const linhaDefeito = `Código de defeito: ${defeito}`;
-    const linhaReparo = `Código de reparo: ${reparo}`;
-    let resultado = `
-OS: ${numero || 'Não informada'}
-Cliente: ${cliente}
-Técnico: ${tecnico}
-${linhaDefeito}
-${linhaReparo}
-${peca ? `Peça usada: ${peca}` : ''}
-Atendimento Garantia: ${atendimentoGarantia ? 'Sim' : 'Não'}
-${orcamentoAprovado ? `Orçamento Aprovado: Sim\nValor Aprovado: R$ ${valorAprovado}\nValor Pago: R$ ${valorPago}` : ''}
-${atendimentoGarantia && reparo1stVisit ? 'Reparo 1st Visit: Sim' : ''}
-Observações: ${observacoes}
-. . . . .`;
-    return resultado;
-  };
-
   const limparFormulario = () => {
     setNumero('');
     setCliente('');
@@ -117,63 +98,67 @@ Observações: ${observacoes}
     }
   };
 
-  const updateTechnicianStats = async (tecnicoNome, tipoOS) => {
-    const statsDocRef = doc(db, 'technicianStats', tecnicoNome);
-    const statsDoc = await getDoc(statsDocRef);
-
-    if (statsDoc.exists()) {
-      const updateData = {
-        totalOS: increment(1),
-        lastUpdate: serverTimestamp(),
-      };
-      if (tipoOS === 'samsung') {
-        updateData.samsungOS = increment(1);
-      }
-      await updateDoc(statsDocRef, updateData);
-    } else {
-      const initialData = {
-        totalOS: 1,
-        samsungOS: tipoOS === 'samsung' ? 1 : 0,
-        assurantOS: 0,
-        lastUpdate: serverTimestamp(),
-      };
-      await setDoc(statsDocRef, initialData);
-    }
-  };
-
-  const updateCarryInStats = async (valorPago, valorAprovado) => {
+  const updateCarryInTotals = async (valorPago, valorAprovado, oldValorPago = 0, oldValorAprovado = 0) => {
     const today = new Date();
     const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth() + 1; // Mês é zero-indexado
+    const currentMonth = today.getMonth() + 1;
+    const dateString = `${currentYear}-${currentMonth}-${today.getDate()}`;
+    const monthString = `${currentYear}-${currentMonth}`;
 
-    // Coleção para estatísticas diárias
-    const dailyStatsRef = doc(db, 'carryIn', `${currentYear}-${currentMonth}-${today.getDate()}`);
+    const valorPagoDiff = parseFloat(valorPago) - parseFloat(oldValorPago);
+    const valorAprovadoDiff = parseFloat(valorAprovado) - parseFloat(oldValorAprovado);
+
+    const dailyStatsRef = doc(db, 'carryIn', dateString);
     await setDoc(dailyStatsRef, {
-      totalPago: increment(parseFloat(valorPago)),
-      totalAprovado: increment(parseFloat(valorAprovado)),
+      totalPago: increment(valorPagoDiff),
+      totalAprovado: increment(valorAprovadoDiff),
       lastUpdate: serverTimestamp()
     }, { merge: true });
 
-    // Coleção para estatísticas mensais
-    const monthlyStatsRef = doc(db, 'carryIn', `${currentYear}-${currentMonth}`);
+    const monthlyStatsRef = doc(db, 'carryIn', monthString);
     await setDoc(monthlyStatsRef, {
-      totalPago: increment(parseFloat(valorPago)),
-      totalAprovado: increment(parseFloat(valorAprovado)),
+      totalPago: increment(valorPagoDiff),
+      totalAprovado: increment(valorAprovadoDiff),
       lastUpdate: serverTimestamp()
     }, { merge: true });
   };
 
   const updateFirstVisitStats = async () => {
     const today = new Date();
-    const currentWeek = Math.ceil((today.getDate() + today.getDay()) / 7); // Simplistic week calculation
-    const currentYear = today.getFullYear();
-    const firstVisitDocRef = doc(db, 'firstVisit', `${currentYear}-${currentWeek}`);
+    const startOfWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
+    const weekString = `${startOfWeek.getFullYear()}-${startOfWeek.getMonth() + 1}-${startOfWeek.getDate()}`;
+    const firstVisitDocRef = doc(db, 'firstVisit', weekString);
 
     await setDoc(firstVisitDocRef, {
       count: increment(1),
+      lastUpdate: serverTimestamp(),
+    }, { merge: true });
+  };
+
+  const updateWarrantyStats = async () => {
+    const today = new Date();
+    const startOfWeek = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
+    const weekString = `${startOfWeek.getFullYear()}-${startOfWeek.getMonth() + 1}-${startOfWeek.getDate()}`;
+    const firstVisitDocRef = doc(db, 'firstVisit', weekString);
+
+    await setDoc(firstVisitDocRef, {
       totalGarantia: increment(1),
       lastUpdate: serverTimestamp(),
     }, { merge: true });
+  };
+
+  const handleGarantiaChange = (e) => {
+    setAtendimentoGarantia(e.target.checked);
+    if (e.target.checked) {
+      setOrcamentoAprovado(false);
+    }
+  };
+
+  const handleOrcamentoChange = (e) => {
+    setOrcamentoAprovado(e.target.checked);
+    if (e.target.checked) {
+      setAtendimentoGarantia(false);
+    }
   };
 
   const handleSubmit = async (event) => {
@@ -198,35 +183,13 @@ Observações: ${observacoes}
       return;
     }
 
-    const defeitoFinal = defeitoSelect;
-    const reparoFinal = reparoSelect;
-    const pecaFinal = peca;
-    const observacoesFinal = observacoes;
-
-    const resultadoTexto = gerarTextoResultado({
-      numero: numeroOS,
-      cliente: clienteNome,
-      tecnico: tecnicoFinal,
-      defeito: defeitoFinal,
-      reparo: reparoFinal,
-      peca: pecaFinal,
-      observacoes: observacoesFinal,
-      atendimentoGarantia,
-      orcamentoAprovado,
-      valorAprovado,
-      valorPago,
-      reparo1stVisit
-    });
-
-    setFormData(resultadoTexto);
-
     try {
       const today = new Date();
       const dateString = today.getFullYear() + '-' +
         String(today.getMonth() + 1).padStart(2, '0') + '-' +
         String(today.getDate()).padStart(2, '0');
 
-      const tecnicoDocRef = doc(db, 'ordensDeServico', tecnicoFinal);
+      const tecnicoDocRef = doc(db, 'ordensDeServicoCI', tecnicoFinal);
       await setDoc(tecnicoDocRef, { nome: tecnicoFinal }, { merge: true });
 
       const osPorDataCollectionRef = collection(tecnicoDocRef, 'osPorData');
@@ -234,16 +197,26 @@ Observações: ${observacoes}
       await setDoc(dataDocRef, { data: dateString }, { merge: true });
 
       const osDocRef = doc(collection(dataDocRef, 'Samsung'), numeroOS || `OS_${Date.now()}`);
+      
+      let oldValorAprovado = 0;
+      let oldValorPago = 0;
+
+      const osDoc = await getDoc(osDocRef);
+      if (osDoc.exists() && orcamentoAprovado) {
+        const osDataOld = osDoc.data();
+        oldValorAprovado = osDataOld.valorAprovado || 0;
+        oldValorPago = osDataOld.valorPago || 0;
+      }
 
       const osData = {
         numeroOS: numeroOS,
         cliente: clienteNome,
         tecnico: tecnicoFinal,
         tipoOS: 'samsung',
-        defeito: defeitoFinal,
-        reparo: reparoFinal,
-        pecaSubstituida: pecaFinal,
-        observacoes: observacoesFinal,
+        defeito: defeitoSelect,
+        reparo: reparoSelect,
+        pecaSubstituida: peca,
+        observacoes: observacoes,
         dataGeracao: serverTimestamp(),
         dataGeracaoLocal: new Date().toISOString(),
         atendimentoGarantia,
@@ -254,24 +227,25 @@ Observações: ${observacoes}
       if (orcamentoAprovado) {
         osData.valorAprovado = parseFloat(valorAprovado);
         osData.valorPago = parseFloat(valorPago);
+        await updateCarryInTotals(osData.valorPago, osData.valorAprovado, oldValorPago, oldValorAprovado);
       }
 
       await setDoc(osDocRef, osData, { merge: true });
 
-      if (orcamentoAprovado) {
-        await updateCarryInStats(valorPago, valorAprovado);
-      }
-      if (atendimentoGarantia && reparo1stVisit) {
-        await updateFirstVisitStats();
+      if (atendimentoGarantia) {
+        await updateWarrantyStats();
+        if (reparo1stVisit) {
+          await updateFirstVisitStats();
+        }
       }
 
       console.log('Ordem de serviço cadastrada no Firebase com sucesso!');
+      alert('Ordem de serviço enviada com sucesso!');
     } catch (e) {
       console.error("Erro ao adicionar documento: ", e);
       alert('Erro ao cadastrar ordem de serviço no Firebase. Verifique o console para mais detalhes.');
     }
   };
-
 
   const preencherPDF = async () => {
     let baseFileName = `/Checklist DTV_IH41_${tipoChecklist}.pdf`;
@@ -315,21 +289,20 @@ Observações: ${observacoes}
       let dataFormatada = '';
       if (dataVisita) {
         const [ano, mes, dia] = dataVisita.split('-');
-        dataFormatada = `${dia}/${mes}/${ano}`;
+        dataFormatada = `${dia}    ${mes}     ${ano}`;
       }
 
       if (tipoAparelho === 'VD') {
-        drawText("FERNANDES COMUNICAÇÕES", 119, height - 72);
-        drawText(cliente, 90, height - 85);
-        drawText(modelo, 90, height - 100);
-        drawText(serial, 420, height - 87);
-        drawText(numero, 420, height - 72);
-        drawText(dataFormatada, 450, height - 100);
+        drawText(cliente, 92, height - 80);
+        drawText(modelo, 92, height - 94);
+        drawText(serial, 420, height - 80);
+        drawText(numero, 420, height - 65);
+        drawText(dataFormatada, 420, height - 93);
         drawText(tecnicoFinal, 120, height - 800);
 
-        drawText(textoDefeito, 70, height - 750);
-        drawText(textoReparo, 70, height - 750 - offset);
-        drawText(textoObservacoes, 70, height - 750 - (offset * 2));
+        drawText(textoDefeito, 70, height - 757);
+        drawText(textoReparo, 70, height - 757 - offset);
+        drawText(textoObservacoes, 70, height - 757 - (offset * 2));
 
         if (pngImage) {
           page.drawImage(pngImage, {
@@ -411,11 +384,11 @@ Observações: ${observacoes}
         {/* Checkboxes de Atendimento e Orçamento */}
         <div style={{ marginTop: '20px' }}>
           <label className="checkbox-container">
-            <input type="checkbox" checked={atendimentoGarantia} onChange={e => setAtendimentoGarantia(e.target.checked)} />
+            <input type="checkbox" checked={atendimentoGarantia} onChange={handleGarantiaChange} />
             Atendimento Garantia?
           </label>
           <label className="checkbox-container">
-            <input type="checkbox" checked={orcamentoAprovado} onChange={e => setOrcamentoAprovado(e.target.checked)} />
+            <input type="checkbox" checked={orcamentoAprovado} onChange={handleOrcamentoChange} />
             Orçamento aprovado?
           </label>
         </div>
@@ -564,7 +537,7 @@ Observações: ${observacoes}
         </div>
         <button type="button" onClick={preencherPDF} style={{ marginTop: '10px' }}>Gerar Checklist PDF!</button>
 
-        <button type="submit">Gerar Resumo da OS!</button>
+        <button type="submit">Enviar ao servidor</button>
         <button type="button" onClick={limparFormulario} style={{ marginTop: '10px' }}>Limpar Formulário</button>
       </form>
     </>
