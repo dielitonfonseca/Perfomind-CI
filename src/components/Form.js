@@ -98,25 +98,15 @@ function Form() {
     }
   };
 
-  const updateCarryInTotals = async (valorPago, valorAprovado, oldValorPago = 0, oldValorAprovado = 0) => {
+  const updateCarryInStats = async (valorPago, valorAprovado, oldValorPago = 0, oldValorAprovado = 0) => {
     const today = new Date();
-    const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth() + 1;
-    const dateString = `${currentYear}-${currentMonth}-${today.getDate()}`;
-    const monthString = `${currentYear}-${currentMonth}`;
+    const dateString = `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
 
     const valorPagoDiff = parseFloat(valorPago) - parseFloat(oldValorPago);
     const valorAprovadoDiff = parseFloat(valorAprovado) - parseFloat(oldValorAprovado);
 
     const dailyStatsRef = doc(db, 'carryIn', dateString);
     await setDoc(dailyStatsRef, {
-      totalPago: increment(valorPagoDiff),
-      totalAprovado: increment(valorAprovadoDiff),
-      lastUpdate: serverTimestamp()
-    }, { merge: true });
-
-    const monthlyStatsRef = doc(db, 'carryIn', monthString);
-    await setDoc(monthlyStatsRef, {
       totalPago: increment(valorPagoDiff),
       totalAprovado: increment(valorAprovadoDiff),
       lastUpdate: serverTimestamp()
@@ -166,35 +156,40 @@ function Form() {
 
     const tecnicoFinal = (tecnicoSelect === 'nao_achei' ? tecnicoManual : tecnicoSelect).trim();
     const numeroOS = numero.trim();
-    const clienteNome = cliente.trim();
+    // const clienteNome = cliente.trim(); // Mantendo a variável para uso no objeto 'osData'
 
     if (numeroOS && !validarNumero(numeroOS)) {
       alert(`Número de OS inválido. O formato esperado é Samsung (417XXXXXXX).`);
       return;
     }
 
-    if (!clienteNome || !tecnicoFinal) {
-      alert("Preencha os campos obrigatórios: Cliente e Técnico.");
+    if (!tecnicoFinal) {
+      alert("Preencha o campo obrigatório: Técnico.");
       return;
     }
-
-    if (orcamentoAprovado && (!valorAprovado || !valorPago)) {
-      alert("Preencha os valores de orçamento aprovado e pago.");
-      return;
-    }
+    
+    // Validação para o nome do cliente foi removida conforme sua solicitação
+    // if (!clienteNome) {
+    //   alert("Preencha o campo de cliente.");
+    //   return;
+    // }
 
     try {
       const today = new Date();
-      const dateString = today.getFullYear() + '-' +
+      const dateStringFirebase = today.getFullYear() + '-' +
         String(today.getMonth() + 1).padStart(2, '0') + '-' +
         String(today.getDate()).padStart(2, '0');
+      
+      const dateStringBr = String(today.getDate()).padStart(2, '0') + '/' +
+        String(today.getMonth() + 1).padStart(2, '0') + '/' +
+        today.getFullYear();
 
       const tecnicoDocRef = doc(db, 'ordensDeServicoCI', tecnicoFinal);
       await setDoc(tecnicoDocRef, { nome: tecnicoFinal }, { merge: true });
 
       const osPorDataCollectionRef = collection(tecnicoDocRef, 'osPorData');
-      const dataDocRef = doc(osPorDataCollectionRef, dateString);
-      await setDoc(dataDocRef, { data: dateString }, { merge: true });
+      const dataDocRef = doc(osPorDataCollectionRef, dateStringFirebase);
+      await setDoc(dataDocRef, { data: dateStringBr }, { merge: true });
 
       const osDocRef = doc(collection(dataDocRef, 'Samsung'), numeroOS || `OS_${Date.now()}`);
       
@@ -210,7 +205,7 @@ function Form() {
 
       const osData = {
         numeroOS: numeroOS,
-        cliente: clienteNome,
+        cliente: cliente, // Usa o estado 'cliente' que pode ser uma string vazia
         tecnico: tecnicoFinal,
         tipoOS: 'samsung',
         defeito: defeitoSelect,
@@ -218,7 +213,7 @@ function Form() {
         pecaSubstituida: peca,
         observacoes: observacoes,
         dataGeracao: serverTimestamp(),
-        dataGeracaoLocal: new Date().toISOString(),
+        dataGeracaoLocal: dateStringBr,
         atendimentoGarantia,
         orcamentoAprovado,
         reparo1stVisit: atendimentoGarantia ? reparo1stVisit : false,
@@ -227,7 +222,7 @@ function Form() {
       if (orcamentoAprovado) {
         osData.valorAprovado = parseFloat(valorAprovado);
         osData.valorPago = parseFloat(valorPago);
-        await updateCarryInTotals(osData.valorPago, osData.valorAprovado, oldValorPago, oldValorAprovado);
+        await updateCarryInStats(osData.valorPago, osData.valorAprovado, oldValorPago, oldValorAprovado);
       }
 
       await setDoc(osDocRef, osData, { merge: true });
@@ -289,7 +284,7 @@ function Form() {
       let dataFormatada = '';
       if (dataVisita) {
         const [ano, mes, dia] = dataVisita.split('-');
-        dataFormatada = `${dia}    ${mes}     ${ano}`;
+        dataFormatada = `${dia}     ${mes}      ${ano}`;
       }
 
       if (tipoAparelho === 'VD') {
@@ -344,7 +339,7 @@ function Form() {
           placeholder="Ex: Fulano de tal"
           value={cliente}
           onChange={(e) => setCliente(e.target.value)}
-          required
+          // O atributo 'required' foi removido
         />
 
         <label htmlFor="tecnicoSelect">Nome do técnico:</label>
@@ -403,7 +398,6 @@ function Form() {
               placeholder="Ex: 500"
               value={valorAprovado}
               onChange={(e) => setValorAprovado(e.target.value)}
-              required
             />
             <label htmlFor="valorPago">Valor Pago:</label>
             <input
@@ -412,7 +406,6 @@ function Form() {
               placeholder="Ex: 500"
               value={valorPago}
               onChange={(e) => setValorPago(e.target.value)}
-              required
             />
           </div>
         )}
