@@ -5,7 +5,7 @@ import Dashboard from '../components/Dashboard';
 function DashboardPage() {
   return (
     <div className="dashboard-page">
-      <h2>Métricas e Desempenho</h2>
+      <h1 style={{ textAlign: 'center' }}>Métricas e Desempenho</h1>
       <Dashboard />
     </div>
   );
