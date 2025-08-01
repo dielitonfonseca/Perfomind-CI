@@ -411,11 +411,29 @@ Observações: ${observacoes}
         {/* Checkboxes de Atendimento e Orçamento */}
         <div style={{ marginTop: '20px' }}>
           <label className="checkbox-container">
-            <input type="checkbox" checked={atendimentoGarantia} onChange={e => setAtendimentoGarantia(e.target.checked)} />
+            <input 
+              type="checkbox" 
+              checked={atendimentoGarantia} 
+              onChange={e => {
+                setAtendimentoGarantia(e.target.checked);
+                if (e.target.checked) {
+                  setOrcamentoAprovado(false);
+                }
+              }} 
+            />
             Atendimento Garantia?
           </label>
           <label className="checkbox-container">
-            <input type="checkbox" checked={orcamentoAprovado} onChange={e => setOrcamentoAprovado(e.target.checked)} />
+            <input 
+              type="checkbox" 
+              checked={orcamentoAprovado} 
+              onChange={e => {
+                setOrcamentoAprovado(e.target.checked);
+                if (e.target.checked) {
+                  setAtendimentoGarantia(false);
+                }
+              }} 
+            />
             Orçamento aprovado?
           </label>
         </div>
